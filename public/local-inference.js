@@ -1,114 +1,105 @@
-// Browser-based Local Inference using Transformers.js + WebGPU
-// This runs LLMs directly in the browser - ZERO COST
+// WebLLM Integration for Sovereign Council
+// Zero-cost local inference via WebGPU - NO API CALLS!
 
-const PIPELINE_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+let webLLMEngine = null;
+let isLoading = false;
 
-let generator = null;
-let isModelLoading = false;
+const MODELS = {
+  // Fastest - 1B params
+  phi: 'Phi-3.5-mini-instruct-q4f16_1-MLC',
+  // Good quality  
+  llama: 'Llama-3.1-1B-Instruct-q4f16_1-MLC',
+  // Best (needs more VRAM)
+  qwen: 'Qwen2-1.5B-Instruct-q4f16_1-MLC',
+};
 
-export async function checkWebGPUSupport() {
-  if (!navigator.gpu) return false;
+async function checkWebGPU() {
+  if (!navigator.gpu) return { available: false, device: 'none' };
   try {
     const adapter = await navigator.gpu.requestAdapter();
-    return !!adapter;
-  } catch {
-    return false;
-  }
+    if (!adapter) return { available: false, device: 'none' };
+    return { available: true, device: adapter.info?.vendor || 'GPU' };
+  } catch { return { available: false, device: 'none' }; }
 }
 
-export async function loadLocalModel() {
-  if (generator || isModelLoading) return !!generator;
+async function loadModel(modelName = 'phi') {
+  if (webLLMEngine || isLoading) return !!webLLMEngine;
   
-  isModelLoading = true;
-  console.log('Loading local model in browser via WebGPU...');
+  isLoading = true;
+  console.log('Loading ' + modelName + ' locally...');
   
   try {
-    // Dynamically import transformers.js
-    const { pipeline, env } = await import(PIPELINE_URL);
-    
-    // Configure for WebGPU
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-    
-    // Use a small, fast model suitable for browser
-    // Phi-1.5 is a good lightweight option (~1B params, 4-bit quantized)
-    generator = await pipeline('text-generation', 'Xenova/phi-1.5', {
-      device: 'webgpu',
-      dtype: 'q4',
+    const model = MODELS[modelName] || MODELS.phi;
+    webLLMEngine = await window.webllm.CreateMLCEngine(model, {
+      deviceType: 'webgpu',
+      dtype: 'q4f16_1',
+      initProgressCallback: (progress, message) => {
+        console.log(`Loading: ${Math.round(progress * 100)}% - ${message}`);
+        updateLoadingStatus(progress, message);
+      }
     });
-    
-    console.log('Local model ready!');
-    isModelLoading = false;
+    console.log('✅ WebLLM ready!');
+    isLoading = false;
     return true;
   } catch (error) {
-    console.error('Failed to load local model:', error);
-    isModelLoading = false;
+    console.error('Failed to load model:', error);
+    isLoading = false;
     return false;
   }
 }
 
-export async function generateLocal(prompt, options = {}) {
-  if (!generator) {
-    const loaded = await loadLocalModel();
-    if (!loaded) throw new Error('Local model not available');
+function updateLoadingStatus(progress, message) {
+  const statusEl = document.getElementById('local-status');
+  if (statusEl) {
+    statusEl.textContent = Math.round(progress * 100) + '%';
+  }
+}
+
+async function generateLocal(prompt, options = {}) {
+  if (!webLLMEngine) {
+    await loadModel();
   }
   
-  const maxTokens = options.maxTokens || 512;
-  const temperature = options.temperature || 0.3;
+  if (!webLLMEngine) throw new Error('Local model not available');
   
   try {
-    const output = await generator(prompt, {
-      max_new_tokens: maxTokens,
-      temperature,
-      do_sample: temperature > 0,
+    const response = await webLLMEngine.chat.completions.create({
+      messages: [
+        { role: 'system', content: 'You are the Sovereign Council. Provide a comprehensive answer with citations [1], [2]. Be concise and accurate.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: options.temperature || 0.3,
+      max_tokens: options.maxTokens || 2048,
     });
     
-    return output[0].generated_text;
+    return response.choices[0]?.message?.content || '';
   } catch (error) {
     console.error('Local generation error:', error);
     throw error;
   }
 }
 
-export function getModelInfo() {
+function getModelInfo() {
   return {
-    name: 'Phi-1.5 (Local)',
-    contextLength: 2048,
+    name: 'WebLLM (Local)',
+    contextLength: 4096,
     supportsVision: false,
     type: 'local-webgpu',
-    description: 'Lightweight model running in browser via WebGPU'
+    description: 'Runs in your browser - zero cost!'
   };
 }
 
-// Check Chrome built-in AI (Gemini Nano)
-export async function checkBuiltInAI() {
-  // @ts-ignore - experimental Chrome API
-  if (window.ai && window.ai.canCreateTextSession) {
-    try {
-      // @ts-ignore
-      const canCreate = await window.ai.canCreateTextSession();
-      if (canCreate === 'no') return { available: false };
-      
-      return {
-        available: true,
-        name: 'Chrome Built-in AI (Gemini Nano)',
-        capabilities: ['text-generation']
-      };
-    } catch {
-      return { available: false };
-    }
-  }
-  return { available: false };
-}
-
-// Initialize and expose global functions
-export async function initLocalAI() {
-  const webgpu = await checkWebGPUSupport();
-  const builtIn = await checkBuiltInAI();
+async function initLocalAI() {
+  const { available, device } = await checkWebGPU();
+  const statusEl = document.getElementById('local-status');
+  const localModelEl = document.getElementById('local-model');
   
-  return {
-    webGPU: webgpu,
-    builtInAI: builtIn,
-    ready: webgpu || builtIn.available
-  };
+  if (available && statusEl) {
+    statusEl.textContent = 'Ready';
+    statusEl.className = 'model-badge bg-purple-500/20 text-purple-400';
+    if (localModelEl) localModelEl.style.opacity = '1';
+    console.log('WebGPU available - ' + device);
+  }
 }
+
+initLocalAI();
