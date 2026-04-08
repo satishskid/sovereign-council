@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+bun.lock
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist
+out
+*.tgz
+
+# Logs
+logs
+*.log
+
+# Cache
+.cache
+.eslintcache
+*.tsbuildinfo
+
+# IDE
+.idea
+.vscode
+.DS_Store
+
+# Local DB (use Turso for prod)
+*.db
+*.db-journal
+
+# Wrangler (secrets are set via CLI, not in repo)
+.wrangler

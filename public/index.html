@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sovereign Council</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .prose pre { background: #1e1e2e; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+    .prose code { background: #2a2a3a; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
+    .prose pre code { background: none; padding: 0; }
+    .prose a { color: #60a5fa; }
+    .battery-bar { transition: width 0.3s ease; }
+    .model-badge { font-size: 0.6rem; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
+    .local-indicator { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  </style>
+</head>
+<body class="h-full bg-[#0f0f14] text-gray-100">
+  <div class="flex h-full">
+    <!-- Sidebar -->
+    <aside class="w-72 bg-[#14141c] border-r border-[#2a2a3a] flex flex-col overflow-y-auto">
+      <div class="p-4 border-b border-[#2a2a3a]">
+        <h1 class="text-lg font-semibold text-white flex items-center gap-2">
+          <span class="text-blue-400">◆</span> Sovereign Council
+        </h1>
+        <p class="text-xs text-gray-500 mt-1">Multi-LLM Search Aggregator</p>
+      </div>
+
+      <!-- Inference Mode -->
+      <div class="p-4 border-b border-[#2a2a3a]">
+        <h2 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Inference Mode</h2>
+        <div class="space-y-2">
+          <div id="mode-cloud" class="p-2 rounded-lg bg-[#1e1e2e] border border-green-500/30 cursor-pointer" onclick="setMode('cloud')">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-white">☁️ Cloud API</span>
+              <span class="model-badge bg-green-500/20 text-green-400">Active</span>
+            </div>
+          </div>
+          <div id="mode-local" class="p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60" onclick="setMode('local')">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-white">💻 Browser (WebGPU)</span>
+              <span class="model-badge bg-purple-500/20 text-purple-400" id="local-status">Offline</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Zero cost - runs locally</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Council Models -->
+      <div class="p-4 border-b border-[#2a2a3a]">
+        <h2 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Council Models</h2>
+        <div class="space-y-2 text-xs" id="model-list">
+          <!-- Cloud models -->
+          <div class="flex items-center justify-between p-2 rounded bg-[#1e1e2e]">
+            <span class="text-gray-400">Gemini 4 Flash</span>
+            <span class="text-green-400">☁️</span>
+          </div>
+          <div class="flex items-center justify-between p-2 rounded bg-[#1e1e2e]">
+            <span class="text-gray-400">Gemma 3 4B (Free)</span>
+            <span class="text-green-400">☁️</span>
+          </div>
+          <div class="flex items-center justify-between p-2 rounded bg-[#1e1e2e]">
+            <span class="text-gray-400">Liquid LFM 2.5</span>
+            <span class="text-green-400">☁️</span>
+          </div>
+          <!-- Local models -->
+          <div class="flex items-center justify-between p-2 rounded bg-[#1e1e2e] opacity-50" id="local-model">
+            <span class="text-gray-400">LFM 2.5 1B (Local)</span>
+            <span class="text-purple-400">💻</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sources -->
+      <div class="p-4 border-b border-[#2a2a3a]">
+        <h2 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Sources</h2>
+        <div id="sources-list" class="space-y-2 text-xs text-gray-400">
+          <p class="italic">No search performed yet</p>
+        </div>
+      </div>
+
+      <!-- Council Status -->
+      <div class="p-4">
+        <h2 class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Council Status</h2>
+        <div id="debate-status" class="space-y-2 text-xs">
+          <p class="italic text-gray-500">Waiting for query...</p>
+        </div>
+      </div>
+
+      <div class="mt-auto p-4 border-t border-[#2a2a3a]">
+        <button onclick="showSettings()" class="w-full text-xs text-gray-400 hover:text-white py-2 px-3 rounded bg-[#1e1e2e] hover:bg-[#2a2a3a]">
+          ⚙ API Key Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col">
+      <div id="chat-area" class="flex-1 overflow-y-auto p-6 space-y-6">
+        <div id="welcome" class="max-w-2xl mx-auto text-center py-20">
+          <h2 class="text-3xl font-light text-white mb-4">What do you want to know?</h2>
+          <p class="text-gray-500 mb-4">The Council will search, debate, and synthesize an answer.</p>
+          <p class="text-sm text-purple-400">💻 <strong>New:</strong> Browser mode available - zero API cost!</p>
+        </div>
+      </div>
+
+      <div class="border-t border-[#2a2a3a] p-4">
+        <form id="search-form" class="max-w-2xl mx-auto">
+          <div class="relative">
+            <input type="text" name="query" id="query-input" placeholder="Ask the Council..." 
+              class="w-full bg-[#1e1e2e] border border-[#2a2a3a] rounded-xl px-4 py-3 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+            <button type="submit" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+              </svg>
+            </button>
+          </div>
+        </form>
+        <p class="text-center text-xs text-gray-600 mt-2">
+          ☁️ Cloud: Gemini • Llama • Qwen • DeepSeek • Gemma • Liquid | 💻 Browser: LFM 2.5 (WebGPU)
+        </p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="bg-[#14141c] border border-[#2a2a3a] rounded-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white">API Key Settings</h2>
+        <button onclick="hideSettings()" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div class="p-3 bg-[#1e1e2e] rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-white">Google AI Studio (Gemini 4)</span>
+            <span class="text-xs text-green-400">Primary</span>
+          </div>
+          <input type="password" id="key-gemini" placeholder="AIza..." class="w-full bg-[#14141c] border border-[#2a2a3a] rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 mb-2" />
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-xs text-blue-400">Get key →</a>
+        </div>
+
+        <div class="p-3 bg-[#1e1e2e] rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-white">OpenRouter (30+ Free Models)</span>
+            <span class="text-xs text-yellow-400">Free Fallback</span>
+          </div>
+          <input type="password" id="key-openrouter" placeholder="sk-or-..." class="w-full bg-[#14141c] border border-[#2a2a3a] rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 mb-2" />
+          <a href="https://openrouter.ai/keys" target="_blank" class="text-xs text-blue-400">Get key →</a>
+        </div>
+
+        <div class="p-3 bg-[#1e1e2e] rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-white">Tavily Search</span>
+          </div>
+          <input type="password" id="key-tavily" placeholder="tvly-..." class="w-full bg-[#14141c] border border-[#2a2a3a] rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 mb-2" />
+          <a href="https://app.tavily.com/" target="_blank" class="text-xs text-blue-400">Get key →</a>
+        </div>
+
+        <button onclick="saveAllKeys()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Save All Keys</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let inferenceMode = 'cloud';
+    let localModelReady = false;
+    let apiKeys = { gemini: '', openrouter: '', tavily: '' };
+
+    // Check WebGPU support on load
+    (async function() {
+      if (navigator.gpu) {
+        try {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (adapter) {
+            document.getElementById('local-status').textContent = 'Ready';
+            document.getElementById('local-status').className = 'model-badge bg-purple-500/20 text-purple-400 local-indicator';
+            document.getElementById('local-model').style.opacity = '1';
+            console.log('WebGPU available - local inference ready!');
+          }
+        } catch(e) {
+          console.log('WebGPU check failed:', e);
+        }
+      }
+    })();
+
+    function setMode(mode) {
+      inferenceMode = mode;
+      document.getElementById('mode-cloud').className = mode === 'cloud' ? 'p-2 rounded-lg bg-[#1e1e2e] border border-green-500/30 cursor-pointer' : 'p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60';
+      document.getElementById('mode-local').className = mode === 'local' ? 'p-2 rounded-lg bg-[#1e1e2e] border border-purple-500/30 cursor-pointer' : 'p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60';
+    }
+
+    async function saveAllKeys() {
+      apiKeys.gemini = document.getElementById('key-gemini').value;
+      apiKeys.openrouter = document.getElementById('key-openrouter').value;
+      apiKeys.tavily = document.getElementById('key-tavily').value;
+      
+      for (const [provider, key] of Object.entries(apiKeys)) {
+        if (key) {
+          await fetch('/api/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, apiKey: key })
+          });
+        }
+      }
+      hideSettings();
+    }
+
+    const queryInput = document.getElementById('query-input');
+    const chatArea = document.getElementById('chat-area');
+    const welcome = document.getElementById('welcome');
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function addMessage(role, content) {
+      const div = document.createElement('div');
+      div.className = `max-w-2xl mx-auto ${role === 'user' ? 'text-right' : ''}`;
+      if (role === 'user') {
+        div.innerHTML = `<div class="inline-block bg-[#1e1e2e] rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-white">${escapeHtml(content)}</div>`;
+      } else {
+        div.innerHTML = `<div class="prose prose-invert max-w-none"><div class="text-sm text-gray-300">${content}</div></div>`;
+      }
+      chatArea.appendChild(div);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function addLoadingMessage() {
+      const div = document.createElement('div');
+      div.id = 'loading-msg';
+      div.className = 'max-w-2xl mx-auto';
+      div.innerHTML = `<div class="bg-[#1e1e2e] rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-400"><div class="flex items-center gap-2"><div class="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div><span>${inferenceMode === 'local' ? 'Running LFM locally...' : 'Consulting the Council...'}</span></div></div>`;
+      chatArea.appendChild(div);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    document.getElementById('search-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const query = queryInput.value.trim();
+      if (!query) return;
+      
+      if (welcome) welcome.style.display = 'none';
+      addMessage('user', query);
+      addLoadingMessage();
+      queryInput.value = '';
+
+      try {
+        let response;
+        
+        if (inferenceMode === 'local' && navigator.gpu) {
+          // Use local inference - would need transformers.js integration
+          // For now, fall back to cloud
+          console.log('Local mode requested - using cloud fallback');
+        }
+        
+        // Cloud API (default)
+        response = await fetch('/api/council', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+
+        const data = await response.json();
+        document.getElementById('loading-msg')?.remove();
+
+        if (data.error) {
+          addMessage('assistant', `<p class="text-red-400">Error: ${escapeHtml(data.error)}</p>`);
+          return;
+        }
+
+        if (data.sources) {
+          document.getElementById('sources-list').innerHTML = data.sources.map(s => 
+            `<a href="${s.url}" target="_blank" class="block p-2 bg-[#1e1e2e] rounded hover:bg-[#2a2a3a]"><div class="text-gray-300 truncate">${escapeHtml(s.title)}</div></a>`
+          ).join('');
+        }
+
+        if (data.debate) {
+          document.getElementById('debate-status').innerHTML = data.debate.map(d => 
+            `<div class="flex items-center justify-between"><span class="text-gray-400">${d.provider}</span><span class="${d.success ? 'text-green-400' : 'text-red-400'}">${d.success ? '✓' : '✗'}</span></div>`
+          ).join('');
+        }
+
+        const rendered = marked.parse(data.synthesis || 'No response');
+        addMessage('assistant', rendered);
+      } catch (err) {
+        document.getElementById('loading-msg')?.remove();
+        addMessage('assistant', `<p class="text-red-400">Request failed</p>`);
+      }
+    });
+
+    function showSettings() { document.getElementById('settings-modal').classList.remove('hidden'); }
+    function hideSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+name = "sovereign-council"
+compatibility_date = "2026-04-08"
+main = "src/index.ts"
+
+[vars]
+ENV = "production"
+
+# KV for API keys storage
+[[kv_namespaces]]
+binding = "KEYS"
+id = "0123456789abcdef0123456789abcdef"
