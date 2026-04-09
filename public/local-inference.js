@@ -5,11 +5,14 @@ let webLLMEngine = null;
 let isLoading = false;
 
 const MODELS = {
-  // Fastest - 1B params
+  // Liquid AI LFM 2.5 - Latest! (Smallest, fastest)
+  lfm_350m: 'LFM-2.5-350M-q4f16_1-MLC',
+  lfm_1b: 'LFM-2.5-1B-q4f16_1-MLC',
+  // Phi - Fast, good reasoning
   phi: 'Phi-3.5-mini-instruct-q4f16_1-MLC',
-  // Good quality  
+  // Llama - Good quality
   llama: 'Llama-3.1-1B-Instruct-q4f16_1-MLC',
-  // Best (needs more VRAM)
+  // Qwen - Best quality (needs more VRAM)
   qwen: 'Qwen2-1.5B-Instruct-q4f16_1-MLC',
 };
 
