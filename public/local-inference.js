@@ -49,7 +49,7 @@ async function loadModel(modelName = 'phi') {
 }
 
 function updateLoadingStatus(progress, message) {
-  const statusEl = document.getElementById('local-status');
+  const statusEl = document.getElementById('browser-status');
   if (statusEl) {
     statusEl.textContent = Math.round(progress * 100) + '%';
   }
@@ -91,7 +91,7 @@ function getModelInfo() {
 
 async function initLocalAI() {
   const { available, device } = await checkWebGPU();
-  const statusEl = document.getElementById('local-status');
+  const statusEl = document.getElementById('browser-status');
   const localModelEl = document.getElementById('local-model');
   
   if (available && statusEl) {

@@ -44,12 +44,19 @@
               <span class="model-badge bg-green-500/20 text-green-400">Active</span>
             </div>
           </div>
-          <div id="mode-local" class="p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60" onclick="setMode('local')">
+          <div id="mode-browser" class="p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60" onclick="setMode('browser')">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-white">💻 Browser (WebGPU)</span>
-              <span class="model-badge bg-purple-500/20 text-purple-400" id="local-status">Offline</span>
+              <span class="text-sm text-white">🌐 Browser (WebGPU)</span>
+              <span class="model-badge bg-purple-500/20 text-purple-400" id="browser-status">Offline</span>
             </div>
-            <p class="text-xs text-gray-500 mt-1">Zero cost - runs locally</p>
+            <p class="text-xs text-gray-500 mt-1">Zero install - runs in Chrome</p>
+          </div>
+          <div id="mode-ollama" class="p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60" onclick="setMode('ollama')">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-white">⚡ Ollama (Local)</span>
+              <span class="model-badge bg-orange-500/20 text-orange-400" id="ollama-status">Check</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Run: ollama serve</p>
           </div>
         </div>
       </div>
@@ -196,8 +203,22 @@
     function setMode(mode) {
       inferenceMode = mode;
       document.getElementById('mode-cloud').className = mode === 'cloud' ? 'p-2 rounded-lg bg-[#1e1e2e] border border-green-500/30 cursor-pointer' : 'p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60';
-      document.getElementById('mode-local').className = mode === 'local' ? 'p-2 rounded-lg bg-[#1e1e2e] border border-purple-500/30 cursor-pointer' : 'p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60';
+      document.getElementById('mode-browser').className = mode === 'browser' ? 'p-2 rounded-lg bg-[#1e1e2e] border border-purple-500/30 cursor-pointer' : 'p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60';
+      document.getElementById('mode-ollama').className = mode === 'ollama' ? 'p-2 rounded-lg bg-[#1e1e2e] border border-orange-500/30 cursor-pointer' : 'p-2 rounded-lg bg-[#1e1e2e] border border-[#2a2a3a] cursor-pointer opacity-60';
     }
+
+    // Check Ollama on load
+    async function checkOllama() {
+      try {
+        const res = await fetch('http://localhost:11434/api/tags', { method: 'GET', signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          document.getElementById('ollama-status').textContent = 'Ready';
+          document.getElementById('ollama-status').className = 'model-badge bg-orange-500/20 text-orange-400';
+          document.getElementById('mode-ollama').style.opacity = '1';
+        }
+      } catch {}
+    }
+    checkOllama();
 
     async function saveAllKeys() {
       apiKeys.gemini = document.getElementById('key-gemini').value;
@@ -259,11 +280,65 @@
 
       try {
         let response;
+        let mode = inferenceMode;
         
-        if (inferenceMode === 'local' && navigator.gpu) {
-          // Use local inference - would need transformers.js integration
-          // For now, fall back to cloud
-          console.log('Local mode requested - using cloud fallback');
+        // Browser mode (WebLLM)
+        if (mode === 'browser' && navigator.gpu) {
+          try {
+            const localRes = await fetch('http://localhost:11434/api/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'phi3',
+                prompt: `You are the Sovereign Council. Answer concisely with citations.
+
+Query: ${query}
+
+Answer:`,
+                stream: false
+              }),
+              signal: AbortSignal.timeout(30000)
+            });
+            if (localRes.ok) {
+              const data = await localRes.json();
+              document.getElementById('loading-msg')?.remove();
+              addMessage('assistant', marked.parse(data.response || 'No response'));
+              return;
+            }
+          } catch (e) {
+            console.log('Browser mode failed, falling back to cloud:', e);
+          }
+        }
+        
+        // Ollama mode
+        if (mode === 'ollama') {
+          try {
+            const ollamaRes = await fetch('http://localhost:11434/api/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'phi3',
+                prompt: `You are the Sovereign Council. Answer with citations [1], [2].
+
+Query: ${query}
+
+Answer:`,
+                stream: false
+              }),
+              signal: AbortSignal.timeout(60000)
+            });
+            if (ollamaRes.ok) {
+              const data = await ollamaRes.json();
+              document.getElementById('loading-msg')?.remove();
+              addMessage('assistant', marked.parse(data.response || 'No response'));
+              return;
+            }
+          } catch (e) {
+            console.log('Ollama not available:', e);
+            addMessage('assistant', '<p class="text-orange-400">Ollama not running. Run "ollama serve" or use Cloud mode.</p>');
+            document.getElementById('loading-msg')?.remove();
+            return;
+          }
         }
         
         // Cloud API (default)
